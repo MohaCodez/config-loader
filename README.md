@@ -14,41 +14,35 @@ Built as a learning project to understand reflection, struct tags, and environme
 - Type coercion from string env vars to int, bool, duration, etc.
 - Validation for required fields and value ranges
 
-## Project Structure
+## Installation
 
-\`\`\`
-config-loader/
-├── loader/
-│   ├── loader.go        # Core loader logic
-│   ├── yaml.go          # YAML parsing
-│   ├── json.go          # JSON parsing
-│   ├── env.go           # Environment variable handling
-│   ├── merge.go         # Precedence and merging logic
-│   └── watcher.go       # Hot-reload file watcher
-├── validator/
-│   └── validator.go     # Config validation
-├── examples/
-│   └── basic/
-│       ├── main.go
-│       └── config.yaml
-├── config.go            # Public API surface
-├── go.mod
-└── README.md
-\`\`\`
+```bash
+go get github.com/amit/config-loader
+```
 
 ## Usage
 
-\`\`\`go
+```go
+package main
+
+import (
+    "fmt"
+    "log"
+    "time"
+    
+    config "github.com/amit/config-loader"
+)
+
 type AppConfig struct {
-    Port    int           \`yaml:"port"    env:"APP_PORT"    default:"8080"\`
-    Debug   bool          \`yaml:"debug"   env:"APP_DEBUG"   default:"false"\`
-    Timeout time.Duration \`yaml:"timeout" env:"APP_TIMEOUT" default:"30s"\`
+    Port    int           `yaml:"port"    env:"APP_PORT"    default:"8080"`
+    Debug   bool          `yaml:"debug"   env:"APP_DEBUG"   default:"false"`
+    Timeout time.Duration `yaml:"timeout" env:"APP_TIMEOUT" default:"30s"`
 
     Database struct {
-        Host     string \`yaml:"host"     env:"DB_HOST"     required:"true"\`
-        Port     int    \`yaml:"port"     env:"DB_PORT"     default:"5432"\`
-        Password string \`yaml:"password" env:"DB_PASSWORD" required:"true"\`
-    } \`yaml:"database"\`
+        Host     string `yaml:"host"     env:"DB_HOST"     required:"true"`
+        Port     int    `yaml:"port"     env:"DB_PORT"     default:"5432"`
+        Password string `yaml:"password" env:"DB_PASSWORD" required:"true"`
+    } `yaml:"database"`
 }
 
 func main() {
@@ -66,9 +60,18 @@ func main() {
 
     fmt.Println("Server running on port:", cfg.Port)
 }
-\`\`\`
+```
+
+## Struct Tags
+
+- `yaml:"key"` - YAML key name
+- `env:"ENV_VAR"` - Environment variable name
+- `default:"value"` - Default value if not set
+- `required:"true"` - Field must be set
 
 ## Precedence Rules
+
+Configuration sources are merged in this order (highest to lowest priority):
 
 | Source | Priority |
 |---|---|
@@ -77,19 +80,56 @@ func main() {
 | YAML file | Low |
 | Struct tag defaults | Lowest |
 
-## Learning Goals
+## Hot-Reload
 
-- **Reflection** — dynamically mapping values onto structs at runtime
-- **Struct tags** — reading metadata to drive behavior
-- **Type coercion** — converting strings to typed values safely
-- **Concurrency** — handling hot-reload without race conditions
-- **Error handling** — graceful failures with useful messages
+Enable hot-reload to automatically reload configuration when files change:
+
+```go
+loader := config.New().
+    WithYAML("config.yaml").
+    WithHotReload().
+    OnReload(func(cfg interface{}) {
+        fmt.Println("Config reloaded!")
+    })
+```
+
+Changes are debounced (300ms) and reloading is goroutine-safe. If the new config is invalid, the old config is kept.
+
+## Validation
+
+The library validates:
+- Required fields are set
+- Port numbers are between 1-65535
+- Duration values are non-negative
+
+## Type Coercion
+
+Environment variables (strings) are automatically converted to:
+- `int`, `int64`
+- `float64`
+- `bool` (accepts "true", "false", "1", "0")
+- `time.Duration` (e.g., "30s", "5m", "1h")
+
+## Example
+
+See `examples/basic/` for a complete working example.
+
+```bash
+cd examples/basic
+go run main.go
+```
+
+## Running Tests
+
+```bash
+go test ./...
+```
 
 ## Dependencies
 
 - [`gopkg.in/yaml.v3`](https://pkg.go.dev/gopkg.in/yaml.v3) — YAML parsing
 - [`github.com/fsnotify/fsnotify`](https://pkg.go.dev/github.com/fsnotify/fsnotify) — File watching
 
-## Status
+## License
 
-🚧 Work in progress — built for learning purposes.
+MIT
