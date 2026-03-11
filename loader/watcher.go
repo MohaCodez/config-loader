@@ -1,6 +1,8 @@
 package loader
 
 import (
+	"fmt"
+	"os"
 	"time"
 	"github.com/fsnotify/fsnotify"
 )
@@ -8,10 +10,11 @@ import (
 type Watcher struct {
 	watcher  *fsnotify.Watcher
 	callback func()
+	onError  func(error)
 	done     chan struct{}
 }
 
-func NewWatcher(paths []string, callback func()) (*Watcher, error) {
+func NewWatcher(paths []string, callback func(), onError func(error)) (*Watcher, error) {
 	fsw, err := fsnotify.NewWatcher()
 	if err != nil {
 		return nil, err
@@ -27,6 +30,7 @@ func NewWatcher(paths []string, callback func()) (*Watcher, error) {
 	w := &Watcher{
 		watcher:  fsw,
 		callback: callback,
+		onError:  onError,
 		done:     make(chan struct{}),
 	}
 
@@ -57,8 +61,11 @@ func (w *Watcher) watch() {
 				return
 			}
 			if err != nil {
-				// Log error but don't crash
-				_ = err
+				if w.onError != nil {
+					w.onError(err)
+				} else {
+					fmt.Fprintf(os.Stderr, "watcher error: %v\n", err)
+				}
 			}
 			
 		case <-w.done:

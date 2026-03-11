@@ -2,19 +2,21 @@ package loader
 
 import (
 	"fmt"
+	"os"
 	"reflect"
 	"sync"
 )
 
 type Loader struct {
-	yamlPath   string
-	jsonPath   string
-	useEnv     bool
-	hotReload  bool
-	onReload   func(interface{})
-	watcher    *Watcher
-	mu         sync.RWMutex
-	configPtr  interface{}
+	yamlPath      string
+	jsonPath      string
+	useEnv        bool
+	hotReload     bool
+	onReload      func(interface{})
+	onReloadError func(error)
+	watcher       *Watcher
+	mu            sync.RWMutex
+	configPtr     interface{}
 }
 
 func New() *Loader {
@@ -46,6 +48,11 @@ func (l *Loader) OnReload(callback func(interface{})) *Loader {
 	return l
 }
 
+func (l *Loader) OnReloadError(callback func(error)) *Loader {
+	l.onReloadError = callback
+	return l
+}
+
 func (l *Loader) Load(configPtr interface{}) error {
 	if reflect.TypeOf(configPtr).Kind() != reflect.Ptr {
 		return fmt.Errorf("config must be a pointer to struct")
@@ -73,13 +80,27 @@ func (l *Loader) Load(configPtr interface{}) error {
 				l.mu.Lock()
 				defer l.mu.Unlock()
 				
+				oldConfig := reflect.New(reflect.TypeOf(l.configPtr).Elem()).Interface()
+				reflect.ValueOf(oldConfig).Elem().Set(reflect.ValueOf(l.configPtr).Elem())
+				
 				if err := l.load(); err != nil {
-					fmt.Printf("hot-reload failed: %v\n", err)
+					reflect.ValueOf(l.configPtr).Elem().Set(reflect.ValueOf(oldConfig).Elem())
+					if l.onReloadError != nil {
+						l.onReloadError(err)
+					} else {
+						fmt.Fprintf(os.Stderr, "hot-reload failed: %v\n", err)
+					}
 					return
 				}
 				
 				if l.onReload != nil {
 					l.onReload(l.configPtr)
+				}
+			}, func(err error) {
+				if l.onReloadError != nil {
+					l.onReloadError(err)
+				} else {
+					fmt.Fprintf(os.Stderr, "watcher error: %v\n", err)
 				}
 			})
 			if err != nil {
